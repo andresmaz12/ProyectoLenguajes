@@ -1,10 +1,11 @@
-from ciclo import palabrasReservadas
-palabras = palabrasReservadas()
+from ciclo import AnalizadorLexico
+palabras = AnalizadorLexico()
 
-class manejoArchivos:
+class ManejoArchivos:
     def __init__(self, ruta):
         self.ruta = ruta
         self.archivoAbierto = None
+        self.numeroDePalabras = 7
 
     # Solo abre el archivo
     def lecturaArchivo(self, ruta):
@@ -32,7 +33,8 @@ class manejoArchivos:
             for numero, linea in enumerate(self.archivoAbierto, start=1):
                 for palabra in linea.split():
                     # Aquí interpretamos cada palabra
-                    palabras.cicloPalabras(palabra)
+                    palabras.clasificar_token(palabra)
+                    self.numeroDePalabras += 1
                     #Prueba
                     # print("palabra leida")
                     
@@ -58,8 +60,3 @@ class manejoArchivos:
         except Exception as e:
             print(f"Hubo un error: {e}")
 
-
-# archivo_manager = manejoArchivos("ruta/archivo.txt")
-# if archivo_manager.lecturaArchivo("mi_archivo.txt"):
-#     archivo_manager.lecturaPalabraPorPalabra()
-#     archivo_manager.cerrarArchivo()
