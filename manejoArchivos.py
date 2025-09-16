@@ -4,26 +4,62 @@ palabras = palabrasReservadas()
 class manejoArchivos:
     def __init__(self, ruta):
         self.ruta = ruta
+        self.archivoAbierto = None
 
-    #Lectrua del archivo de texto linea por linea, funcionando similar a python o JS
+    # Solo abre el archivo
     def lecturaArchivo(self, ruta):
         try:
-            with open(ruta, "r", encoding="utf-8") as archivo:
-                for numero, linea in enumerate(archivo, start=1):
-                    #Metodo para interpretar lo escrito en el texto
-                    palabras.cicloPalabras(linea)
+            self.archivoAbierto = open(ruta, "r", encoding="utf-8")
+            print(f"Archivo '{ruta}' abierto correctamente")
+            return True
         except FileNotFoundError: 
-            print("Archvio no encontrado")
+            print("Archivo no encontrado")
+            return False
         except Exception as e: 
-            print(f"ocurrio un error: {e}")
+            print(f"Ocurrió un error: {e}")
+            return False
 
-    #Permite que el usuario ingrese lineas de codigo simple guardadas en un archvio de texto plano
+    # Lectura palabra por palabra del archivo ya abierto
+    def lecturaPalabraPorPalabra(self):
+        if self.archivoAbierto is None:
+            print("No hay ningún archivo abierto")
+            return
+        
+        try:
+            # Reiniciar el puntero del archivo al inicio
+            self.archivoAbierto.seek(0)
+            
+            for numero, linea in enumerate(self.archivoAbierto, start=1):
+                for palabra in linea.split():
+                    # Aquí interpretamos cada palabra
+                    palabras.cicloPalabras(palabra)
+                    #Prueba
+                    # print("palabra leida")
+                    
+        except Exception as e:
+            print(f"Ocurrió un error durante la lectura: {e}")
+
+    # Método para cerrar el archivo
+    def cerrarArchivo(self):
+        if self.archivoAbierto:
+            self.archivoAbierto.close()
+            self.archivoAbierto = None
+            print("Archivo cerrado")
+
+    # Escritura en archivo de texto plano
     def escrituraArchivos(self, ruta):
         try: 
             with open(ruta, "a", encoding="utf-8") as archivo:
                 while True: 
                     linea = input("")
-                    if linea.upper() == "Finalizar":
+                    if linea.upper() == "FINALIZAR":
                         break
+                    archivo.write(linea + "\n")
         except Exception as e:
             print(f"Hubo un error: {e}")
+
+
+# archivo_manager = manejoArchivos("ruta/archivo.txt")
+# if archivo_manager.lecturaArchivo("mi_archivo.txt"):
+#     archivo_manager.lecturaPalabraPorPalabra()
+#     archivo_manager.cerrarArchivo()
