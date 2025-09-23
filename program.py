@@ -55,6 +55,7 @@ def analizar_archivo():
         widget.destroy()
 
     errores = []
+    variables_declaradas = set()  # Guardamos las variables válidas
 
     with open(ruta, "r", encoding="utf-8") as archivo:
         lineas = archivo.readlines()
@@ -63,11 +64,28 @@ def analizar_archivo():
             if not linea:
                 continue
 
-            # Separar tokens de manera más estricta
-            tokens = re.findall(r"\w+|==|!=|<=|>=|[+\-*/=<>%(){};“\"]|.", linea)
+            # Separar tokens con expresiones regulares
+            tokens = re.findall(r"\w+|==|!=|<=|>=|[+\-*/=<>%(){};,]", linea)
 
-            for token in tokens:
+            i = 0
+            while i < len(tokens):
+                token = tokens[i]
                 categoria = clasificar_token(token, tokens_json)
+
+                # --- Manejo de declaraciones ---
+                if categoria == "Preservada":
+                    # Si es un tipo de dato y el siguiente token es identificador → declarar variable
+                    if i + 1 < len(tokens):
+                        siguiente = tokens[i + 1]
+                        if clasificar_token(siguiente, tokens_json) == "identificadores":
+                            variables_declaradas.add(siguiente)
+
+                # --- Manejo de identificadores ---
+                elif categoria == "identificadores":
+                    if token not in variables_declaradas:
+                        errores.append(f"Línea {numero}: Variable '{token}' usada sin declarar")
+
+                # --- Tokens desconocidos ---
                 if categoria == "desconocido":
                     errores.append(f"Línea {numero}: Token desconocido '{token}'")
                 elif categoria != "espacio":
@@ -75,6 +93,8 @@ def analizar_archivo():
                         tokenss[token]["Cantidad"] += 1
                     else:
                         tokenss[token] = {"Token": token, "Tipo": categoria, "Cantidad": 1}
+
+                i += 1
 
     # Mostrar errores o mensaje de éxito
     if errores:
@@ -141,4 +161,3 @@ frame_tabla = tk.Frame(frame_der)
 frame_tabla.pack(fill="both", expand=True, pady=5)
 
 ventana.mainloop()
-
