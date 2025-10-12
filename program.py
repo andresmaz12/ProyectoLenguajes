@@ -1,18 +1,25 @@
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, messagebox, scrolledtext
 import json
 import re
 import os
 
 # ================== Cargar JSON de tokens ==================
-tokenss = {}
+tokens_json = {}
 try:
     with open("Tokens.json", "r", encoding="utf-8") as archivo:
         tokens_json = json.load(archivo)
     print("✓ JSON de tokens cargado correctamente")
 except FileNotFoundError:
-    messagebox.showerror("Error", "❌ No se encontró el archivo Tokens.json")
-    exit()
+    print("❌ Error: No se encontró el archivo Tokens.json")
+    print("Creando archivo de ejemplo...")
+    tokens_json = {
+        "Preservada": ["int", "float", "char", "if", "else", "while", "for", "return", "void"],
+        "operadores": ["+", "-", "*", "/", "=", "==", "!=", "<=", ">=", "<", ">", "%"],
+        "signos": ["(", ")", "{", "}", ";", ","]
+    }
+    with open("Tokens.json", "w", encoding="utf-8") as f:
+        json.dump(tokens_json, f, indent=4, ensure_ascii=False)
 except json.JSONDecodeError:
     messagebox.showerror("Error", "❌ El archivo Tokens.json tiene formato inválido")
     exit()
@@ -20,15 +27,15 @@ except json.JSONDecodeError:
 # ================== Función para clasificar tokens ==================
 def clasificar_token(token, categorias):
     """Clasifica un token según las categorías definidas en el JSON."""
-    if token in categorias["Preservada"]:
+    if token in categorias.get("Preservada", []):
         return "Preservada"
-    if token in categorias["operadores"]:
+    if token in categorias.get("operadores", []):
         return "operadores"
-    if token in categorias["signos"]:
+    if token in categorias.get("signos", []):
         return "signos"
     if re.match(r"^\d+(\.\d+)?$", token):
         return "numeros"
-    if re.match(r"^[a-zA-Z][a-zA-Z0-9]*$", token):
+    if re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", token):
         return "identificadores"
     if token == " ":
         return "espacio"
@@ -37,127 +44,224 @@ def clasificar_token(token, categorias):
 # ================== Función para analizar el archivo ==================
 def analizar_archivo():
     """Analiza el archivo seleccionado y muestra errores y tabla de tokens."""
-    global tokenss
-    tokenss = {}
+    global tokens_dict
+    tokens_dict = {}
 
     if not ruta_archivo.get():
-        messagebox.showwarning("Atención", "Seleccione un archivo primero")
+        messagebox.showwarning("Atención", "⚠️ Seleccione un archivo primero")
         return
 
     ruta = ruta_archivo.get()
     if not os.path.exists(ruta):
-        messagebox.showerror("Error", f"El archivo {ruta} no existe")
+        messagebox.showerror("Error", f"❌ El archivo {ruta} no existe")
         return
 
     # Limpiar área de mensajes y tabla
+    text_mensajes.config(state=tk.NORMAL)
     text_mensajes.delete(1.0, tk.END)
     for widget in frame_tabla.winfo_children():
         widget.destroy()
 
     errores = []
-    variables_declaradas = set()  # Guardamos las variables válidas
+    variables_declaradas = set()
+    tipos_datos = tokens_json.get("Preservada", [])
 
-    with open(ruta, "r", encoding="utf-8") as archivo:
-        lineas = archivo.readlines()
-        for numero, linea in enumerate(lineas, start=1):
-            linea = linea.strip()
-            if not linea:
-                continue
+    try:
+        with open(ruta, "r", encoding="utf-8") as archivo:
+            lineas = archivo.readlines()
+            
+            for numero, linea in enumerate(lineas, start=1):
+                linea_original = linea.rstrip()
+                linea = linea.strip()
+                
+                if not linea or linea.startswith("//"):
+                    continue
 
-            # Separar tokens con expresiones regulares
-            tokens = re.findall(r"\w+|==|!=|<=|>=|[+\-*/=<>%(){};,]", linea)
+                # Separar tokens con expresiones regulares mejoradas
+                tokens = re.findall(r"\w+|==|!=|<=|>=|\+\+|--|[+\-*/=<>%(){};,]", linea)
 
-            i = 0
-            while i < len(tokens):
-                token = tokens[i]
-                categoria = clasificar_token(token, tokens_json)
+                i = 0
+                esperando_identificador = False
+                tipo_actual = None
 
-                # --- Manejo de declaraciones ---
-                if categoria == "Preservada":
-                    # Si es un tipo de dato y el siguiente token es identificador → declarar variable
-                    if i + 1 < len(tokens):
-                        siguiente = tokens[i + 1]
-                        if clasificar_token(siguiente, tokens_json) == "identificadores":
-                            variables_declaradas.add(siguiente)
+                while i < len(tokens):
+                    token = tokens[i]
+                    categoria = clasificar_token(token, tokens_json)
 
-                # --- Manejo de identificadores ---
-                elif categoria == "identificadores":
-                    if token not in variables_declaradas:
-                        errores.append(f"Línea {numero}: Variable '{token}' usada sin declarar")
+                    # --- Manejo de declaraciones ---
+                    if categoria == "Preservada" and token in tipos_datos:
+                        esperando_identificador = True
+                        tipo_actual = token
 
-                # --- Tokens desconocidos ---
-                if categoria == "desconocido":
-                    errores.append(f"Línea {numero}: Token desconocido '{token}'")
-                elif categoria != "espacio":
-                    if token in tokenss:
-                        tokenss[token]["Cantidad"] += 1
-                    else:
-                        tokenss[token] = {"Token": token, "Tipo": categoria, "Cantidad": 1}
+                    # --- Manejo de identificadores ---
+                    elif categoria == "identificadores":
+                        if esperando_identificador:
+                            variables_declaradas.add(token)
+                            esperando_identificador = False
+                        elif token not in variables_declaradas:
+                            errores.append(f"❌ Línea {numero}: Variable '{token}' usada sin declarar")
 
-                i += 1
+                    # Resetear si encontramos un signo de punto y coma
+                    if token == ";":
+                        esperando_identificador = False
+                        tipo_actual = None
+
+                    # --- Tokens desconocidos ---
+                    if categoria == "desconocido":
+                        errores.append(f"❌ Línea {numero}: Token desconocido '{token}'")
+                    elif categoria != "espacio":
+                        if token in tokens_dict:
+                            tokens_dict[token]["Cantidad"] += 1
+                        else:
+                            tokens_dict[token] = {
+                                "Token": token,
+                                "Tipo": categoria,
+                                "Cantidad": 1
+                            }
+
+                    i += 1
+
+    except Exception as e:
+        messagebox.showerror("Error", f"❌ Error al leer el archivo: {str(e)}")
+        return
 
     # Mostrar errores o mensaje de éxito
     if errores:
+        text_mensajes.tag_config("error", foreground="red")
         for err in errores:
-            text_mensajes.insert(tk.END, err + "\n")
+            text_mensajes.insert(tk.END, err + "\n", "error")
     else:
-        text_mensajes.insert(tk.END, "✓ Todo está correcto, no se encontraron errores\n")
-
+        text_mensajes.tag_config("exito", foreground="green", font=("Arial", 10, "bold"))
+        text_mensajes.insert(tk.END, "✓ Análisis completado exitosamente\n", "exito")
+        text_mensajes.insert(tk.END, f"✓ Total de tokens únicos: {len(tokens_dict)}\n")
+        text_mensajes.insert(tk.END, f"✓ Variables declaradas: {len(variables_declaradas)}\n")
+    
+    text_mensajes.config(state=tk.DISABLED)
     crear_tabla()
 
 # ================== Función para crear la tabla ==================
 def crear_tabla():
     """Genera la tabla de tokens válidos con sus tipos y cantidad."""
+    if not tokens_dict:
+        return
+    
+    # Crear canvas con scrollbar para la tabla
+    canvas = tk.Canvas(frame_tabla, bg="white")
+    scrollbar_v = tk.Scrollbar(frame_tabla, orient="vertical", command=canvas.yview)
+    scrollbar_h = tk.Scrollbar(frame_tabla, orient="horizontal", command=canvas.xview)
+    
+    frame_interno = tk.Frame(canvas, bg="white")
+    frame_interno.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+    
+    canvas.create_window((0, 0), window=frame_interno, anchor="nw")
+    canvas.configure(yscrollcommand=scrollbar_v.set, xscrollcommand=scrollbar_h.set)
+    
+    # Encabezados
     columnas = ["TOKEN", "TIPO", "CANTIDAD"]
-
     for col, texto in enumerate(columnas):
-        lbl = tk.Label(frame_tabla, text=texto, bg="black", fg="white", width=20, borderwidth=1, relief="solid")
-        lbl.grid(row=0, column=col, sticky="nsew")
+        lbl = tk.Label(frame_interno, text=texto, bg="#2c3e50", fg="white", 
+                      width=25, font=("Arial", 10, "bold"), borderwidth=1, relief="solid")
+        lbl.grid(row=0, column=col, sticky="nsew", padx=1, pady=1)
 
-    for fila, (token, datos) in enumerate(tokenss.items(), start=1):
-        tk.Label(frame_tabla, text=datos["Token"], width=20, borderwidth=1, relief="solid").grid(row=fila, column=0, sticky="nsew")
-        tk.Label(frame_tabla, text=datos["Tipo"], width=20, borderwidth=1, relief="solid").grid(row=fila, column=1, sticky="nsew")
-        tk.Label(frame_tabla, text=datos["Cantidad"], width=20, borderwidth=1, relief="solid").grid(row=fila, column=2, sticky="nsew")
+    # Ordenar tokens por tipo y nombre
+    tokens_ordenados = sorted(tokens_dict.items(), key=lambda x: (x[1]["Tipo"], x[0]))
+    
+    # Colores alternos para filas
+    colores = ["#ecf0f1", "#ffffff"]
+    
+    for fila, (token, datos) in enumerate(tokens_ordenados, start=1):
+        color = colores[fila % 2]
+        
+        tk.Label(frame_interno, text=datos["Token"], width=25, bg=color, 
+                borderwidth=1, relief="solid").grid(row=fila, column=0, sticky="nsew", padx=1, pady=1)
+        tk.Label(frame_interno, text=datos["Tipo"], width=25, bg=color,
+                borderwidth=1, relief="solid").grid(row=fila, column=1, sticky="nsew", padx=1, pady=1)
+        tk.Label(frame_interno, text=datos["Cantidad"], width=25, bg=color,
+                borderwidth=1, relief="solid").grid(row=fila, column=2, sticky="nsew", padx=1, pady=1)
+    
+    canvas.pack(side="left", fill="both", expand=True)
+    scrollbar_v.pack(side="right", fill="y")
+    scrollbar_h.pack(side="bottom", fill="x")
 
 # ================== Función para seleccionar archivo ==================
 def seleccionar_archivo():
     """Permite al usuario seleccionar un archivo .txt y muestra su contenido."""
-    archivo = filedialog.askopenfilename(filetypes=[("Archivos de texto", "*.txt")])
+    archivo = filedialog.askopenfilename(
+        title="Seleccionar archivo a analizar",
+        filetypes=[("Archivos de texto", "*.txt"), ("Todos los archivos", "*.*")]
+    )
     if archivo:
         ruta_archivo.set(archivo)
-        with open(archivo, "r", encoding="utf-8") as f:
-            contenido = f.read()
-        text_contenido.delete(1.0, tk.END)
-        text_contenido.insert(tk.END, contenido)
+        try:
+            with open(archivo, "r", encoding="utf-8") as f:
+                contenido = f.read()
+            text_contenido.config(state=tk.NORMAL)
+            text_contenido.delete(1.0, tk.END)
+            text_contenido.insert(tk.END, contenido)
+            text_contenido.config(state=tk.DISABLED)
+            
+            # Mostrar nombre del archivo
+            nombre_archivo = os.path.basename(archivo)
+            ventana.title(f"Analizador de Tokens - {nombre_archivo}")
+        except Exception as e:
+            messagebox.showerror("Error", f"❌ No se pudo leer el archivo: {str(e)}")
 
 # ================== Interfaz gráfica ==================
 ventana = tk.Tk()
-ventana.title("Analizador de Tokens")
-ventana.geometry("1000x600")
+ventana.title("Analizador Léxico")
+ventana.geometry("1200x700")
+ventana.configure(bg="#34495e")
+
+# Variable global
+tokens_dict = {}
+ruta_archivo = tk.StringVar()
 
 # Paneles izquierdo y derecho
-frame_izq = tk.Frame(ventana)
-frame_izq.pack(side="left", fill="both", expand=True, padx=5, pady=5)
+frame_izq = tk.Frame(ventana, bg="#34495e")
+frame_izq.pack(side="left", fill="both", expand=True, padx=10, pady=10)
 
-frame_der = tk.Frame(ventana)
-frame_der.pack(side="right", fill="both", expand=True, padx=5, pady=5)
+frame_der = tk.Frame(ventana, bg="#34495e")
+frame_der.pack(side="right", fill="both", expand=True, padx=10, pady=10)
 
-# Área izquierda: botones y contenido del archivo
-ruta_archivo = tk.StringVar()
-btn_seleccionar = tk.Button(frame_izq, text="Seleccionar Archivo", command=seleccionar_archivo)
-btn_seleccionar.pack(pady=5)
+# ===== PANEL IZQUIERDO =====
+tk.Label(frame_izq, text="CÓDIGO FUENTE", bg="#34495e", fg="white", 
+         font=("Arial", 12, "bold")).pack(pady=5)
 
-btn_analizar = tk.Button(frame_izq, text="Analizar Archivo", command=analizar_archivo)
-btn_analizar.pack(pady=5)
+# Botones
+frame_botones = tk.Frame(frame_izq, bg="#34495e")
+frame_botones.pack(pady=5)
 
-text_contenido = tk.Text(frame_izq, wrap="word", width=50, height=30, borderwidth=1, relief="solid")
+btn_seleccionar = tk.Button(frame_botones, text="📁 Seleccionar Archivo", 
+                            command=seleccionar_archivo, bg="#3498db", fg="white",
+                            font=("Arial", 10, "bold"), padx=15, pady=8)
+btn_seleccionar.pack(side="left", padx=5)
+
+btn_analizar = tk.Button(frame_botones, text="🔍 Analizar", 
+                         command=analizar_archivo, bg="#2ecc71", fg="white",
+                         font=("Arial", 10, "bold"), padx=15, pady=8)
+btn_analizar.pack(side="left", padx=5)
+
+# Área de texto con scrollbar
+text_contenido = scrolledtext.ScrolledText(frame_izq, wrap="none", width=50, height=35, 
+                                          borderwidth=2, relief="solid", font=("Consolas", 10),
+                                          state=tk.DISABLED)
 text_contenido.pack(fill="both", expand=True, pady=5)
 
-# Área derecha: mensajes y tabla
-text_mensajes = tk.Text(frame_der, wrap="word", width=60, height=15, borderwidth=1, relief="solid", fg="blue")
+# ===== PANEL DERECHO =====
+tk.Label(frame_der, text="RESULTADOS DEL ANÁLISIS", bg="#34495e", fg="white",
+         font=("Arial", 12, "bold")).pack(pady=5)
+
+# Área de mensajes
+text_mensajes = scrolledtext.ScrolledText(frame_der, wrap="word", width=60, height=10,
+                                         borderwidth=2, relief="solid", font=("Arial", 9),
+                                         state=tk.DISABLED)
 text_mensajes.pack(fill="both", expand=False, pady=5)
 
-frame_tabla = tk.Frame(frame_der)
+tk.Label(frame_der, text="TABLA DE TOKENS", bg="#34495e", fg="white",
+         font=("Arial", 12, "bold")).pack(pady=5)
+
+# Frame para la tabla
+frame_tabla = tk.Frame(frame_der, bg="white", borderwidth=2, relief="solid")
 frame_tabla.pack(fill="both", expand=True, pady=5)
 
 ventana.mainloop()
