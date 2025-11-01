@@ -61,7 +61,14 @@ class AnalizadorGramatical:
     
     def _tokenizar_linea(self, linea):
         """Tokeniza una línea"""
-        return re.findall(r"\w+|==|!=|<=|>=|\+\+|--|[+\-*/=<>%(){}\[\];,]", linea)
+        # Nuevo patrón: reconoce cadenas entre comillas dobles como un solo token
+        tokens = re.findall(r'"[^"]*"|\w+|==|!=|<=|>=|\+\+|--|[+\-*/=<>%(){}\[\];,]', linea)
+
+        # Quitar cualquier token que sea solo comillas sueltas
+        tokens_limpios = [t for t in tokens if t != '"' and t != "''" and t.strip() != '']
+        return tokens_limpios
+
+
         
     def validar_linea(self, linea, numero_linea, tokens):
         """
@@ -110,25 +117,69 @@ class AnalizadorGramatical:
         return len(tokens) >= 2 and tokens[0] in self.tipos_datos
     
     def _validar_declaracion(self, tokens, linea):
-        """⚠ SE MANTIENE IGUAL - Valida: tipo nombre [= valor];"""
+        """Valida una declaración: tipo nombre [= valor];"""
         resultado = {"errores": [], "advertencias": []}
-        
+
         if len(tokens) < 2:
             resultado["errores"].append(f"⚠ Línea {linea}: Declaración incompleta")
             return resultado
-        
-        # Verificar que el segundo token sea un identificador válido
-        if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", tokens[1]):
-            resultado["errores"].append(f"⚠ Línea {linea}: '{tokens[1]}' no es un identificador válido")
+
+        tipo_dato = tokens[0]
+        nombre_var = tokens[1]
+
+        # Verificar identificador válido
+        if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", nombre_var):
+            resultado["errores"].append(f"⚠ Línea {linea}: '{nombre_var}' no es un identificador válido")
             return resultado
-        
-        self.variables.add(tokens[1])
-        
-        # Advertencia si no hay inicialización
+
+        # Registrar variable
+        self.variables.add(nombre_var)
+
+        # Sin inicialización
         if len(tokens) == 2 or (len(tokens) == 3 and tokens[-1] == ";"):
-            resultado["advertencias"].append(f"⚠️ Línea {linea}: Variable '{tokens[1]}' declarada pero no inicializada")
-        
+            resultado["advertencias"].append(f"⚠️ Línea {linea}: Variable '{nombre_var}' declarada pero no inicializada")
+            return resultado
+
+        # Si tiene asignación
+        if "=" in tokens:
+            idx = tokens.index("=")
+            if idx + 1 >= len(tokens):
+                resultado["errores"].append(f"⚠ Línea {linea}: Falta valor en la asignación")
+                return resultado
+
+            valor = tokens[idx + 1]
+
+            # Validación según tipo
+            if tipo_dato == "cadena":
+                # Acepta solo valores entre comillas dobles
+                if not re.match(r'^".*"$', valor):
+                    resultado["errores"].append(
+                        f"❌ Línea {linea}: Las variables tipo 'cadena' deben tener valores entre comillas dobles (\"texto\")"
+                    )
+
+            elif tipo_dato == "booleano":
+                # Acepta solo verdadero o falso
+                if valor not in ["verdadero", "falso"]:
+                    resultado["errores"].append(
+                        f"❌ Línea {linea}: Las variables tipo 'booleano' solo pueden ser 'verdadero' o 'falso'"
+                    )
+
+            elif tipo_dato == "entero":
+                # Acepta solo números enteros
+                if not re.match(r"^\d+$", valor):
+                    resultado["errores"].append(
+                        f"⚠ Línea {linea}: Valor '{valor}' inválido para tipo 'entero'"
+                    )
+
+            elif tipo_dato == "decimal":
+                # Acepta enteros o números con punto decimal
+                if not re.match(r"^\d+(\.\d+)?$", valor):
+                    resultado["errores"].append(
+                        f"⚠ Línea {linea}: Valor '{valor}' inválido para tipo 'decimal'"
+                    )
+
         return resultado
+
     
     def _contiene_asignacion(self, tokens):
         """⚠ SE MANTIENE IGUAL - Detecta si hay asignación (=) pero no es comparación (==)"""
