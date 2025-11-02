@@ -28,15 +28,9 @@ class AnalizadorLexico:
             raise ValueError("⚠ El archivo Tokens.json tiene formato inválido")
     
     def clasificar_token(self, token):
-        """
-        Clasifica un token según las categorías definidas en el JSON
-        
-        Args:
-            token (str): El token a clasificar
-            
-        Returns:
-            str: Categoría del token (Preservada, operadores, signos, numeros, identificadores, espacio, desconocido)
-        """
+        if re.match(r'^".*"$', token):
+            return "cadena"
+
         if token in self.tokens_json.get("Preservada", []):
             return "Preservada"
         if token in self.tokens_json.get("operadores", []):
@@ -50,20 +44,15 @@ class AnalizadorLexico:
         if token == " ":
             return "espacio"
         return "desconocido"
-    
+
     def tokenizar_linea(self, linea):
         """
-        Tokeniza una línea de código
-        
-        Args:
-            linea (str): Línea de código a tokenizar
-            
-        Returns:
-            list: Lista de tokens encontrados
+        Tokeniza una línea de código, incluyendo cadenas entre comillas dobles
         """
-        # Regex mejorada para capturar operadores compuestos y símbolos
-        return re.findall(r"\w+|==|!=|<=|>=|\+\+|--|[+\-*/=<>%(){}\[\];,]", linea)
-    
+        # Captura cadenas completas "texto con espacios"
+        patron = r'"[^"]*"|\w+|==|!=|<=|>=|\+\+|--|[+\-*/=<>%(){}\[\];,]'
+        return re.findall(patron, linea)
+
     def registrar_token(self, token):
         """
         Registra un token en el diccionario interno
