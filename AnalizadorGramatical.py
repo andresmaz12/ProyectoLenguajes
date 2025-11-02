@@ -61,10 +61,8 @@ class AnalizadorGramatical:
     
     def _tokenizar_linea(self, linea):
         """Tokeniza una línea"""
-        # Nuevo patrón: reconoce cadenas entre comillas dobles como un solo token
         tokens = re.findall(r'"[^"]*"|\w+|==|!=|<=|>=|\+\+|--|[+\-*/=<>%(){}\[\];,]', linea)
 
-        # Quitar cualquier token que sea solo comillas sueltas
         tokens_limpios = [t for t in tokens if t != '"' and t != "''" and t.strip() != '']
         return tokens_limpios
 
@@ -109,8 +107,6 @@ class AnalizadorGramatical:
         advertencias.extend(self._detectar_ambiguedad(tokens, numero_linea))
         
         return {"errores": errores, "advertencias": advertencias}
-    
-    # ========== MÉTODOS PRIVADOS (SE MANTIENEN IGUALES) ==========
     
     def _es_declaracion(self, tokens):
         """⚠ SE MANTIENE IGUAL - Detecta si es una declaración de variable"""
