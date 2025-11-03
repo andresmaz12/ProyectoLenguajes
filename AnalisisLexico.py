@@ -28,24 +28,33 @@ class AnalizadorLexico:
             raise ValueError("⚠ El archivo Tokens.json tiene formato inválido")
     
     def clasificar_token(self, token):
-        if re.match(r'^".*"$', token):
+        token = token.strip()  # elimina espacios residuales
+        
+        # Detectar cadenas
+        if re.fullmatch(r'"(?:\\.|[^"\\])*"', token):
             return "cadena"
-
-        if token in self.tokens_json.get("Preservada", []):
-            return "Preservada"
-        if token in self.tokens_json.get("operadores", []):
-            return "operadores"
-        if token in self.tokens_json.get("signos", []):
-            return "signos"
-        if re.match(r"^\d+(\.\d+)?$", token):
+        
+        # Palabras reservadas, operadores y signos (según JSON)
+        for categoria in ["Preservada", "operadores", "signos"]:
+            if token in self.tokens_json.get(categoria, []):
+                return categoria
+        
+        # Números (enteros o decimales)
+        if re.fullmatch(r"\d+(\.\d+)?", token):
             return "numeros"
-        if re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", token):
+        
+        # Identificadores (variables)
+        if re.fullmatch(r"[a-zA-Z_][a-zA-Z0-9_]*", token):
             return "identificadores"
+        
+        # Espacios o saltos
         if token == " ":
             return "espacio"
         if token == "\n":
             return "salto de linea"
-        return "desconocido"
+        
+        # Si no encaja con nada
+        return"desconocido"
 
     def tokenizar_linea(self, linea):
     # Mejor patrón para cadenas con escapes

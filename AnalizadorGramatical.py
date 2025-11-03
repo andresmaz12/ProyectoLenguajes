@@ -1,18 +1,19 @@
 import re
+from PDA import PDA
 
 class AnalizadorGramatical:
-    """Validador de reglas gramaticales y sintaxis"""
+    """Validador de reglas gramaticales y sintaxis usando PDA"""
     
     def __init__(self, tokens_json):
         self.tokens_json = tokens_json
         self.variables = {}
         self.funciones = set()
-        self.estructuras_abiertas = []
         self.tipos_datos = tokens_json.get("Preservada", [])
+        self.pda = PDA()  # Instancia del Autómata de Pila
         
     def analizar_codigo(self, codigo):
         """
-        Analiza un código completo
+        Analiza un código completo usando PDA y validaciones semánticas
         
         Args:
             codigo (str): Código fuente completo
@@ -27,13 +28,14 @@ class AnalizadorGramatical:
         """
         self.variables = {}
         self.funciones = set()
-        self.estructuras_abiertas = []
+        self.pda.reiniciar()
         
         errores_totales = []
         advertencias_totales = []
         
         lineas = codigo.split('\n')
         
+        # Primera pasada: Análisis con PDA
         for numero_linea, linea in enumerate(lineas, start=1):
             linea_limpia = linea.strip()
             
@@ -41,17 +43,22 @@ class AnalizadorGramatical:
                 continue
             
             tokens = self._tokenizar_linea(linea_limpia)
-            validacion = self.validar_linea(linea_limpia, numero_linea, tokens)
             
+            # Procesar con PDA
+            self.pda.procesar_linea(tokens, numero_linea)
+            
+            # Validaciones semánticas adicionales
+            validacion = self.validar_semantica(linea_limpia, numero_linea, tokens)
             errores_totales.extend(validacion["errores"])
             advertencias_totales.extend(validacion["advertencias"])
         
-        # Validar que todas las estructuras estén cerradas
-        if self.estructuras_abiertas:
-            for estructura in self.estructuras_abiertas:
-                errores_totales.append(
-                    f"⚠ Línea {estructura['linea']}: '{estructura['tipo']}' sin 'finaliza'"
-                )
+        # Validar que el PDA termine en estado válido
+        self.pda.validar_final()
+        
+        # Obtener resultados del PDA
+        resultados_pda = self.pda.obtener_resultados()
+        errores_totales.extend(resultados_pda['errores'])
+        advertencias_totales.extend(resultados_pda['advertencias'])
         
         return {
             'errores': errores_totales,
@@ -67,20 +74,10 @@ class AnalizadorGramatical:
         tokens_limpios = [t for t in tokens if t not in ('"', "''") and t.strip() != '']
         return tokens_limpios
         
-    def validar_linea(self, linea, numero_linea, tokens):
+    def validar_semantica(self, linea, numero_linea, tokens):
+        """Validaciones semánticas (declaraciones, tipos, etc.)"""
         errores = []
         advertencias = []
-        
-        # Detectar 'siguiente' y 'finaliza'
-        if "siguiente" in tokens:
-            resultado = self._validar_siguiente(tokens, numero_linea)
-            errores.extend(resultado["errores"])
-            advertencias.extend(resultado["advertencias"])
-        
-        if "finaliza" in tokens:
-            resultado = self._validar_finaliza(tokens, numero_linea)
-            errores.extend(resultado["errores"])
-            advertencias.extend(resultado["advertencias"])
         
         # Regla 1: Declaración de variables
         if self._es_declaracion(tokens):
@@ -94,57 +91,22 @@ class AnalizadorGramatical:
             errores.extend(resultado["errores"])
             advertencias.extend(resultado["advertencias"])
         
-        # Regla 3: Estructura de control (if, while, for)
-        if self._es_estructura_control(tokens):
-            resultado = self._validar_estructura_control(tokens, numero_linea)
-            errores.extend(resultado["errores"])
-            advertencias.extend(resultado["advertencias"])
-        
-        # Regla 4: Llamada a función
+        # Regla 3: Llamada a función
         if self._es_llamada_funcion(tokens):
             resultado = self._validar_llamada_funcion(tokens, numero_linea)
             errores.extend(resultado["errores"])
             advertencias.extend(resultado["advertencias"])
         
-        # Regla 5: Paréntesis y corchetes balanceados (ya no llaves)
-        errores.extend(self._validar_balanceo(tokens, numero_linea))
-        
-        # Regla 6: Detección de ambigüedad
-        advertencias.extend(self._detectar_ambiguedad(tokens, numero_linea))
-
-        # Regla 7: Declaración de funciones
+        # Regla 4: Declaración de funciones
         if self._es_declaracion_funcion(tokens):
             resultado = self._validar_declaracion_funcion(tokens, numero_linea)
             errores.extend(resultado["errores"])
             advertencias.extend(resultado["advertencias"])
+        
+        # Regla 5: Detección de ambigüedad
+        advertencias.extend(self._detectar_ambiguedad(tokens, numero_linea))
 
         return {"errores": errores, "advertencias": advertencias}
-    
-    def _validar_siguiente(self, tokens, linea):
-        """Valida el uso de 'siguiente'"""
-        resultado = {"errores": [], "advertencias": []}
-        
-        # 'siguiente' debe aparecer después de una estructura de control o función
-        if not self.estructuras_abiertas:
-            resultado["errores"].append(
-                f"⚠ Línea {linea}: 'siguiente' sin estructura previa (si/mientras/para/func)"
-            )
-        
-        return resultado
-    
-    def _validar_finaliza(self, tokens, linea):
-        """Valida el uso de 'finaliza'"""
-        resultado = {"errores": [], "advertencias": []}
-        
-        if not self.estructuras_abiertas:
-            resultado["errores"].append(
-                f"⚠ Línea {linea}: 'finaliza' sin estructura abierta"
-            )
-        else:
-            # Cerrar la última estructura abierta
-            self.estructuras_abiertas.pop()
-        
-        return resultado
     
     def _es_declaracion(self, tokens):
         """Detecta si es una declaración de variable"""
@@ -257,59 +219,6 @@ class AnalizadorGramatical:
             
         return resultado
     
-    def _es_estructura_control(self, tokens):
-        """Detecta if, while, for"""
-        return any(kw in tokens for kw in ["si", "mientras", "para", "sino"])
-    
-    def _validar_estructura_control(self, tokens, linea):
-        """Valida: if/while/for (condición) siguiente ... finaliza"""
-        resultado = {"errores": [], "advertencias": []}
-        
-        ctrl_keywords = ["si", "mientras", "para"]
-        keyword = None
-        
-        for kw in ctrl_keywords:
-            if kw in tokens:
-                keyword = kw
-                break
-        
-        if not keyword:
-            return resultado
-        
-        idx = tokens.index(keyword)
-        
-        # Verificar que exista paréntesis después
-        """if idx + 1 >= len(tokens) or tokens[idx + 1] != "(":
-            resultado["errores"].append(f"⚠ Línea {linea}: '{keyword}' debe ir seguido de '('")
-            return resultado
-        """
-        # Verificar que termine con 'siguiente'
-        if "siguiente" not in tokens:
-            resultado["advertencias"].append(
-                f"⚠️ Línea {linea}: '{keyword}' debería terminar con 'siguiente'"
-            )
-        else:
-            # Registrar estructura abierta
-            self.estructuras_abiertas.append({
-                'tipo': keyword,
-                'linea': linea
-            })
-        
-        # Para 'para', verificar estructura: para (init; cond; inc)
-        if keyword == "para":
-            if ";" not in tokens:
-                resultado["errores"].append(
-                    f"⚠ Línea {linea}: 'para' requiere formato: para(init; condición; incremento)"
-                )
-            else:
-                semicolons = [i for i, t in enumerate(tokens) if t == ";"]
-                if len(semicolons) != 2:
-                    resultado["advertencias"].append(
-                        f"⚠️ Línea {linea}: Estructura 'para' incompleta (se esperan 2 ';')"
-                    )
-        
-        return resultado
-    
     def _es_llamada_funcion(self, tokens):
         """Detecta llamadas a función: nombre()"""
         for i, token in enumerate(tokens):
@@ -324,38 +233,11 @@ class AnalizadorGramatical:
         
         for i, token in enumerate(tokens):
             if i + 1 < len(tokens) and tokens[i + 1] == "(":
-                if token not in ["si", "mientras", "para"] and token not in self.funciones:
+                if token not in ["si", "mientras", "para", "imprimir"] and token not in self.funciones:
                     self.funciones.add(token)
         
         return resultado
     
-    def _validar_balanceo(self, tokens, linea):
-        """Valida que paréntesis y corchetes estén balanceados (ya no llaves)"""
-        errores = []
-        pares = {"(": ")", "[": "]"}
-        stack = []
-
-        for i, token in enumerate(tokens):
-            # Ignorar saltos de línea y palabras clave que no son delimitadores
-            if token == "\n" or token in ["siguiente", "finaliza", "sino"]:
-                continue
-
-            if token in pares:
-                stack.append((token, linea, i))
-            elif token in pares.values():
-                if not stack:
-                    errores.append(f"⚠ Línea {linea}: '{token}' sin apertura")
-                elif pares[stack[-1][0]] != token:
-                    errores.append(f"⚠ Línea {linea}: No coinciden '{stack[-1][0]}' con '{token}'")
-                else:
-                    stack.pop()
-
-        # Solo reportar error si hay paréntesis/corchetes sin cerrar AL FINAL DE LA LÍNEA
-        for token, line, pos in stack:
-            errores.append(f"⚠ Línea {line}: '{token}' no cerrado")
-
-        return errores
-
     def _es_declaracion_funcion(self, tokens):
         """Detecta declaración de función: func nombre() siguiente ... finaliza"""
         return "func" in tokens
@@ -390,18 +272,6 @@ class AnalizadorGramatical:
         # Verificar paréntesis
         if idx + 2 >= len(tokens) or tokens[idx + 2] != "(":
             resultado["errores"].append(f"⚠ Línea {linea}: Falta '(' después del nombre de la función")
-        
-        # Verificar que termine con 'siguiente'
-        if "siguiente" not in tokens:
-            resultado["advertencias"].append(
-                f"⚠️ Línea {linea}: La función debería terminar con 'siguiente'"
-            )
-        else:
-            # Registrar estructura abierta
-            self.estructuras_abiertas.append({
-                'tipo': 'func',
-                'linea': linea
-            })
         
         return resultado
 
