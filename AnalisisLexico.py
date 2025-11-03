@@ -17,7 +17,7 @@ class AnalizadorLexico:
         except FileNotFoundError:
             print("⚠ No se encontró Tokens.json, creando uno por defecto...")
             tokens = {
-                "Preservada": ["entero", "decimal", "caracter", "si", "sino", "mientras", "para", "imprimir","func"],
+                "Preservada": ["entero", "decimal", "caracter", "si", "sino", "mientras", "para", "imprimir","func", "siguente", "finaliza"],
                 "operadores": ["+", "-", "*", "/", "=", "==", "!=", "<=", ">=", "<", ">", "%", "++", "--"],
                 "signos": ["(", ")", "{", "}", ";", ",", "[", "]"]
             }
