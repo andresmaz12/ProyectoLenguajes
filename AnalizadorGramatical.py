@@ -279,10 +279,10 @@ class AnalizadorGramatical:
         idx = tokens.index(keyword)
         
         # Verificar que exista paréntesis después
-        if idx + 1 >= len(tokens) or tokens[idx + 1] != "(":
+        """if idx + 1 >= len(tokens) or tokens[idx + 1] != "(":
             resultado["errores"].append(f"⚠ Línea {linea}: '{keyword}' debe ir seguido de '('")
             return resultado
-        
+        """
         # Verificar que termine con 'siguiente'
         if "siguiente" not in tokens:
             resultado["advertencias"].append(
