@@ -17,7 +17,7 @@ class AnalizadorLexico:
         except FileNotFoundError:
             print("⚠ No se encontró Tokens.json, creando uno por defecto...")
             tokens = {
-                "Preservada": ["int", "float", "char", "if", "else", "while", "for", "return", "void", "main"],
+                "Preservada": ["entero", "decimal", "caracter", "si", "sino", "mientras", "para", "imprimir"],
                 "operadores": ["+", "-", "*", "/", "=", "==", "!=", "<=", ">=", "<", ">", "%", "++", "--"],
                 "signos": ["(", ")", "{", "}", ";", ",", "[", "]"]
             }
@@ -43,15 +43,18 @@ class AnalizadorLexico:
             return "identificadores"
         if token == " ":
             return "espacio"
+        if token == "\n":
+            return "salto de linea"
         return "desconocido"
 
     def tokenizar_linea(self, linea):
         """
-        Tokeniza una línea de código, incluyendo cadenas entre comillas dobles
+        Tokeniza una línea de código o bloque, incluyendo cadenas entre comillas dobles
+        y saltos de línea (\n) como tokens.
         """
-        # Captura cadenas completas "texto con espacios"
-        patron = r'"[^"]*"|\w+|==|!=|<=|>=|\+\+|--|[+\-*/=<>%(){}\[\];,]'
+        patron = r'"[^"]*"|\w+|==|!=|<=|>=|\+\+|--|[+\-*/=<>%(){}\[\];,]|\n'
         return re.findall(patron, linea)
+
 
     def registrar_token(self, token):
         """

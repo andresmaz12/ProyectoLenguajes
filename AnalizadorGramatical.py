@@ -60,17 +60,19 @@ class AnalizadorGramatical:
         }
     
     def _tokenizar_linea(self, linea):
-        """Tokeniza una línea"""
-        tokens = re.findall(r'"[^"]*"|\w+|==|!=|<=|>=|\+\+|--|[+\-*/=<>%(){}\[\];,]', linea)
+        """Tokeniza una línea, incluyendo saltos de línea"""
+        # Incluye \n al final del patrón para capturar el Enter
+        tokens = re.findall(r'"[^"]*"|\w+|==|!=|<=|>=|\+\+|--|[+\-*/=<>%(){}\[\];,]|\n', linea)
 
-        tokens_limpios = [t for t in tokens if t != '"' and t != "''" and t.strip() != '']
+        # Limpia tokens vacíos o comillas sueltas
+        tokens_limpios = [t for t in tokens if t not in ('"', "''") and t.strip() != '']
         return tokens_limpios
+
 
 
         
     def validar_linea(self, linea, numero_linea, tokens):
         """
-        ⚠ ESTE MÉTODO SE MANTIENE IGUAL QUE EN ComprobacionDatos.py
         Valida una línea según reglas gramaticales
         """
         errores = []
@@ -109,7 +111,7 @@ class AnalizadorGramatical:
         return {"errores": errores, "advertencias": advertencias}
     
     def _es_declaracion(self, tokens):
-        """⚠ SE MANTIENE IGUAL - Detecta si es una declaración de variable"""
+        """ Detecta si es una declaración de variable"""
         return len(tokens) >= 2 and tokens[0] in self.tipos_datos
     
     def _validar_declaracion(self, tokens, linea):
@@ -178,11 +180,11 @@ class AnalizadorGramatical:
 
     
     def _contiene_asignacion(self, tokens):
-        """⚠ SE MANTIENE IGUAL - Detecta si hay asignación (=) pero no es comparación (==)"""
+        """ Detecta si hay asignación (=) pero no es comparación (==)"""
         return "=" in tokens and "==" not in " ".join(tokens)
     
     def _validar_asignacion(self, tokens, linea):
-        """⚠ SE MANTIENE IGUAL - Valida asignaciones: variable = valor;"""
+        """Valida asignaciones: variable = valor;"""
         resultado = {"errores": [], "advertencias": []}
         
         if "=" not in tokens:
@@ -207,14 +209,14 @@ class AnalizadorGramatical:
         return resultado
     
     def _es_estructura_control(self, tokens):
-        """⚠ SE MANTIENE IGUAL - Detecta if, while, for"""
-        return any(kw in tokens for kw in ["if", "while", "for", "else"])
+        """Detecta if, while, for"""
+        return any(kw in tokens for kw in ["si", "mientras", "para", "sino"])
     
     def _validar_estructura_control(self, tokens, linea):
-        """⚠ SE MANTIENE IGUAL - Valida: if/while/for (condición) { ... }"""
+        """ Valida: if/while/for (condición) { ... }"""
         resultado = {"errores": [], "advertencias": []}
         
-        ctrl_keywords = ["if", "while", "for"]
+        ctrl_keywords = ["si", "mientras", "para"]
         keyword = None
         
         for kw in ctrl_keywords:
@@ -233,18 +235,18 @@ class AnalizadorGramatical:
             return resultado
         
         # Para 'for', verificar estructura: for (init; cond; inc)
-        if keyword == "for":
+        if keyword == "para":
             if ";" not in tokens:
-                resultado["errores"].append(f"⚠ Línea {linea}: 'for' requiere formato: for(init; condición; incremento)")
+                resultado["errores"].append(f"⚠ Línea {linea}: 'para' requiere formato: para(init; condición; incremento)")
             else:
                 semicolons = [i for i, t in enumerate(tokens) if t == ";"]
                 if len(semicolons) != 2:
-                    resultado["advertencias"].append(f"⚠️ Línea {linea}: Estructura 'for' incompleta (se esperan 2 ';')")
+                    resultado["advertencias"].append(f"⚠️ Línea {linea}: Estructura 'para' incompleta (se esperan 2 ';')")
         
         return resultado
     
     def _es_llamada_funcion(self, tokens):
-        """⚠ SE MANTIENE IGUAL - Detecta llamadas a función: nombre()"""
+        """Detecta llamadas a función: nombre()"""
         for i, token in enumerate(tokens):
             if i + 1 < len(tokens) and tokens[i + 1] == "(":
                 if re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", token):
@@ -252,23 +254,28 @@ class AnalizadorGramatical:
         return False
     
     def _validar_llamada_funcion(self, tokens, linea):
-        """⚠ SE MANTIENE IGUAL - Valida llamadas a función"""
+        """Valida llamadas a función"""
         resultado = {"errores": [], "advertencias": []}
         
         for i, token in enumerate(tokens):
             if i + 1 < len(tokens) and tokens[i + 1] == "(":
-                if token not in ["if", "while", "for"] and token not in self.funciones:
+                if token not in ["si", "mientras", "para"] and token not in self.funciones:
                     self.funciones.add(token)
         
         return resultado
     
     def _validar_balanceo(self, tokens, linea):
-        """⚠ SE MANTIENE IGUAL - Valida que paréntesis y llaves estén balanceados"""
+        """Valida que paréntesis, llaves y corchetes estén balanceados, 
+        incluyendo el salto de línea como token válido (neutral)."""
         errores = []
         pares = {"(": ")", "{": "}", "[": "]"}
         stack = []
-        
+
         for i, token in enumerate(tokens):
+            # Ignora los saltos de línea, no afectan el balanceo
+            if token == "\n":
+                continue
+
             if token in pares:
                 stack.append((token, linea, i))
             elif token in pares.values():
@@ -278,14 +285,15 @@ class AnalizadorGramatical:
                     errores.append(f"⚠ Línea {linea}: No coinciden '{stack[-1][0]}' con '{token}'")
                 else:
                     stack.pop()
-        
+
         for token, line, pos in stack:
             errores.append(f"⚠ Línea {line}: '{token}' no cerrado")
-        
+
         return errores
+
     
     def _detectar_ambiguedad(self, tokens, linea):
-        """⚠ SE MANTIENE IGUAL - Detecta construcciones ambiguas o potencialmente problemáticas"""
+        """Detecta construcciones ambiguas o potencialmente problemáticas"""
         advertencias = []
         
         # Ambigüedad 1: Operadores sin espacios
@@ -294,7 +302,7 @@ class AnalizadorGramatical:
             advertencias.append(f"⚠️ Línea {linea}: Operador sin espacios (ambigüedad)")
         
         # Ambigüedad 2: Asignación dentro de condición
-        if "if" in tokens or "while" in tokens:
+        if "si" in tokens or "mientras" in tokens:
             if "=" in tokens and "==" not in " ".join(tokens):
                 advertencias.append(f"⚠️ Línea {linea}: ¿Asignación dentro de condición? (ambigüedad)")
         

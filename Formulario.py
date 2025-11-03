@@ -51,24 +51,16 @@ class InterfazAnalizador:
         btn_seleccionar.pack(side="left", padx=5)
         
         btn_analizar = tk.Button(frame_botones, text="🔍 Analizar", 
-                                command=self._analizar_archivo, 
+                                command=self._analizar_codigo_textbox,  # ⚠ NUEVA FUNCIÓN
                                 bg="#2ecc71", fg="white",
                                 font=("Arial", 10, "bold"), 
                                 padx=15, pady=8)
         btn_analizar.pack(side="left", padx=5)
-        
-        # Área de texto con scrollbar
-        self.text_contenido = scrolledtext.ScrolledText(
-            frame_izq, wrap="none", width=50, height=35, 
-            borderwidth=2, relief="solid", font=("Consolas", 10),
-            state=tk.DISABLED
-        )
-        self.text_contenido.pack(fill="both", expand=True, pady=5)
-        
+
         # ===== PANEL DERECHO (RESULTADOS) =====
         tk.Label(frame_der, text="ANÁLISIS LÉXICO Y GRAMATICAL", bg="#34495e", fg="white",
                 font=("Arial", 12, "bold")).pack(pady=5)
-        
+
         # Área de mensajes
         self.text_mensajes = scrolledtext.ScrolledText(
             frame_der, wrap="word", width=60, height=10,
@@ -76,38 +68,46 @@ class InterfazAnalizador:
             state=tk.DISABLED
         )
         self.text_mensajes.pack(fill="both", expand=False, pady=5)
-        
+
         tk.Label(frame_der, text="TABLA DE TOKENS", bg="#34495e", fg="white",
-                font=("Arial", 12, "bold")).pack(pady=5)
-        
+        font=("Arial", 12, "bold")).pack(pady=5)
+
         # Frame para la tabla
         self.frame_tabla = tk.Frame(frame_der, bg="white", borderwidth=2, relief="solid")
         self.frame_tabla.pack(fill="both", expand=True, pady=5)
-    
+
+        # Área de texto editable
+        self.text_contenido = scrolledtext.ScrolledText(
+            frame_izq, wrap="none", width=50, height=35, 
+            borderwidth=2, relief="solid", font=("Consolas", 10),
+            state=tk.NORMAL  # ⚠ CAMBIO IMPORTANTE: ahora editable
+        )
+        self.text_contenido.pack(fill="both", expand=True, pady=5)
+
     def _seleccionar_archivo(self):
         """⚠ SE MANTIENE IGUAL - Permite al usuario seleccionar un archivo"""
         archivo = filedialog.askopenfilename(
-            title="Seleccionar archivo a analizar",
-            filetypes=[("Archivos de texto", "*.txt"), ("Todos los archivos", "*.*")]
-        )
-        
+        title="Seleccionar archivo a analizar",
+        filetypes=[("Archivos de texto", "*.txt"), ("Todos los archivos", "*.*")]
+            )
+            
         if archivo:
             self.ruta_archivo.set(archivo)
             try:
                 with open(archivo, "r", encoding="utf-8") as f:
                     contenido = f.read()
-                
+                    
                 self.text_contenido.config(state=tk.NORMAL)
                 self.text_contenido.delete(1.0, tk.END)
                 self.text_contenido.insert(tk.END, contenido)
                 self.text_contenido.config(state=tk.DISABLED)
-                
+                    
                 # Mostrar nombre del archivo en el título
                 nombre_archivo = os.path.basename(archivo)
                 self.ventana.title(f"Analizador Léxico y Gramatical - {nombre_archivo}")
             except Exception as e:
                 messagebox.showerror("Error", f"⚠ No se pudo leer el archivo: {str(e)}")
-    
+        
     def _analizar_archivo(self):
         """
         ⚠ CAMBIO PRINCIPAL: Ahora usa los analizadores en lugar de lógica embebida
@@ -244,7 +244,29 @@ class InterfazAnalizador:
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar_v.pack(side="right", fill="y")
         scrollbar_h.pack(side="bottom", fill="x")
-    
+
+    def _analizar_codigo_textbox(self):
+        """Analiza el contenido escrito directamente en el TextBox"""
+        codigo = self.text_contenido.get("1.0", tk.END).strip()
+        if not codigo:
+            messagebox.showwarning("Atención", "⚠️ No hay código para analizar")
+            return
+
+        # Limpiar resultados anteriores
+        self._limpiar_resultados()
+
+        try:
+            # ⚙ Análisis léxico y gramatical
+            resultado_lexico = self.analizador_lexico.analizar_codigo(codigo)
+            resultado_gramatical = self.analizador_gramatical.analizar_codigo(codigo)
+
+            # Mostrar resultados
+            self._mostrar_resultados(resultado_lexico, resultado_gramatical)
+            self._crear_tabla()
+
+        except Exception as e:
+            messagebox.showerror("Error", f"⚠ Error al analizar el código: {str(e)}")
+
     def iniciar(self):
         """Inicia el loop principal de la interfaz"""
         self.ventana.mainloop()
