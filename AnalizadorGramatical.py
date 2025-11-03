@@ -336,7 +336,8 @@ class AnalizadorGramatical:
         stack = []
 
         for i, token in enumerate(tokens):
-            if token == "\n":
+            # Ignorar saltos de línea y palabras clave que no son delimitadores
+            if token == "\n" or token in ["siguiente", "finaliza", "sino"]:
                 continue
 
             if token in pares:
@@ -349,6 +350,7 @@ class AnalizadorGramatical:
                 else:
                     stack.pop()
 
+        # Solo reportar error si hay paréntesis/corchetes sin cerrar AL FINAL DE LA LÍNEA
         for token, line, pos in stack:
             errores.append(f"⚠ Línea {line}: '{token}' no cerrado")
 
