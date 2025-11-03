@@ -17,7 +17,7 @@ class AnalizadorLexico:
         except FileNotFoundError:
             print("⚠ No se encontró Tokens.json, creando uno por defecto...")
             tokens = {
-                "Preservada": ["entero", "decimal", "caracter", "si", "sino", "mientras", "para", "imprimir"],
+                "Preservada": ["entero", "decimal", "caracter", "si", "sino", "mientras", "para", "imprimir","func"],
                 "operadores": ["+", "-", "*", "/", "=", "==", "!=", "<=", ">=", "<", ">", "%", "++", "--"],
                 "signos": ["(", ")", "{", "}", ";", ",", "[", "]"]
             }
@@ -48,13 +48,9 @@ class AnalizadorLexico:
         return "desconocido"
 
     def tokenizar_linea(self, linea):
-        """
-        Tokeniza una línea de código o bloque, incluyendo cadenas entre comillas dobles
-        y saltos de línea (\n) como tokens.
-        """
-        patron = r'"[^"]*"|\w+|==|!=|<=|>=|\+\+|--|[+\-*/=<>%(){}\[\];,]|\n'
+    # Mejor patrón para cadenas con escapes
+        patron = r'"(?:\\.|[^"\\])*"|\w+|==|!=|<=|>=|\+\+|--|[+\-*/=<>%(){}\[\];,]|\n'
         return re.findall(patron, linea)
-
 
     def registrar_token(self, token):
         """
@@ -95,10 +91,14 @@ class AnalizadorLexico:
         lineas = codigo.split('\n')
         
         for numero_linea, linea in enumerate(lineas, start=1):
+            # Eliminar comentarios inline
+            if '//' in linea:
+                linea = linea[:linea.index('//')]
+            
             linea_limpia = linea.strip()
             
-            # Ignorar líneas vacías y comentarios
-            if not linea_limpia or linea_limpia.startswith("//"):
+            # Ignorar líneas vacías
+            if not linea_limpia:
                 continue
             
             tokens = self.tokenizar_linea(linea_limpia)

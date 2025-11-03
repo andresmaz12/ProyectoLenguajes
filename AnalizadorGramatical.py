@@ -4,18 +4,12 @@ class AnalizadorGramatical:
     """Validador de reglas gramaticales y sintaxis"""
     
     def __init__(self, tokens_json):
-        """
-        Inicializa el analizador gramatical
-        
-        Args:
-            tokens_json (dict): Diccionario con categorías de tokens
-        """
         self.tokens_json = tokens_json
-        self.variables = set()
+        self.variables = {}  # ✅ CAMBIAR de set() a dict
         self.funciones = set()
-        self.estructuras_abiertas = []  # Stack para { } ( )
+        self.estructuras_abiertas = []
         self.tipos_datos = tokens_json.get("Preservada", [])
-    
+        
     def analizar_codigo(self, codigo):
         """
         Analiza un código completo
@@ -31,7 +25,7 @@ class AnalizadorGramatical:
                 'funciones': set de funciones encontradas
             }
         """
-        self.variables = set()
+        self.variables = {}
         self.funciones = set()
         self.estructuras_abiertas = []
         
@@ -72,12 +66,8 @@ class AnalizadorGramatical:
 
         
     def validar_linea(self, linea, numero_linea, tokens):
-        """
-        Valida una línea según reglas gramaticales
-        """
         errores = []
         advertencias = []
-        
         # Regla 1: Declaración de variables
         if self._es_declaracion(tokens):
             resultado = self._validar_declaracion(tokens, numero_linea)
@@ -107,7 +97,13 @@ class AnalizadorGramatical:
         
         # Regla 6: Detección de ambigüedad
         advertencias.extend(self._detectar_ambiguedad(tokens, numero_linea))
-        
+
+        # Regla 7: Declaración de funciones
+        if self._es_declaracion_funcion(tokens):
+            resultado = self._validar_declaracion_funcion(tokens, numero_linea)
+            errores.extend(resultado["errores"])
+            advertencias.extend(resultado["advertencias"])
+
         return {"errores": errores, "advertencias": advertencias}
     
     def _es_declaracion(self, tokens):
@@ -131,7 +127,7 @@ class AnalizadorGramatical:
             return resultado
 
         # Registrar variable
-        self.variables.add(nombre_var)
+        self.variables[nombre_var] = tipo_dato
 
         # Sin inicialización
         if len(tokens) == 2 or (len(tokens) == 3 and tokens[-1] == ";"):
@@ -184,7 +180,6 @@ class AnalizadorGramatical:
         return "=" in tokens and "==" not in " ".join(tokens)
     
     def _validar_asignacion(self, tokens, linea):
-        """Valida asignaciones: variable = valor;"""
         resultado = {"errores": [], "advertencias": []}
         
         if "=" not in tokens:
@@ -198,16 +193,34 @@ class AnalizadorGramatical:
         
         var = tokens[idx - 1]
         
-        # Detectar ambigüedad: ¿es comparación o asignación?
+        # Detectar si es comparación ==
         if idx + 1 < len(tokens) and tokens[idx + 1] == "=":
-            # Es comparación ==, no asignación
             return resultado
         
-        if var not in self.variables and not re.match(r"^\d+", var):
-            resultado["errores"].append(f"⚠ Línea {linea}: Variable '{var}' no declarada antes de usar")
+        # Validar que la variable esté declarada
+        if re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", var):
+            if var not in self.variables:
+                resultado["errores"].append(f"⚠ Línea {linea}: Variable '{var}' no declarada")
+                return resultado
         
+            # NUEVO: Validar tipo de dato
+            if idx + 1 < len(tokens):
+                valor = tokens[idx + 1]
+                tipo_var = self.variables[var]
+                
+                if tipo_var == "entero" and not re.match(r"^\d+$", valor):
+                    if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", valor):  # No es otra variable
+                        resultado["errores"].append(f"⚠ Línea {linea}: Tipo incompatible, '{var}' es 'entero'")
+                
+                elif tipo_var == "cadena" and not re.match(r'^".*"$', valor):
+                    if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", valor):
+                        resultado["errores"].append(f"⚠ Línea {linea}: Tipo incompatible, '{var}' es 'cadena'")
+                
+                elif tipo_var == "booleano" and valor not in ["verdadero", "falso"]:
+                    if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", valor):
+                        resultado["errores"].append(f"⚠ Línea {linea}: Tipo incompatible, '{var}' es 'booleano'")
+            
         return resultado
-    
     def _es_estructura_control(self, tokens):
         """Detecta if, while, for"""
         return any(kw in tokens for kw in ["si", "mientras", "para", "sino"])
@@ -291,7 +304,57 @@ class AnalizadorGramatical:
 
         return errores
 
+    def _requiere_punto_coma(self, tokens):
+        """Determina si la línea requiere punto y coma"""
+        if not tokens:
+            return False
+        # No requieren ; las líneas que abren bloques
+        if '{' in tokens or '}' in tokens:
+            return False
+        # Requieren ; las declaraciones y asignaciones
+        return any(t in self.tipos_datos for t in tokens) or '=' in tokens
+
+    def _termina_con_punto_coma(self, tokens):
+        """Verifica si la línea termina con punto y coma"""
+        return tokens and tokens[-1] == ';'
+
+    def _es_declaracion_funcion(self, tokens):
+        """Detecta declaración de función: func nombre() { }"""
+        return "func" in tokens
+
+    def _validar_declaracion_funcion(self, tokens, linea):
+        """Valida declaración de funciones"""
+        resultado = {"errores": [], "advertencias": []}
+        
+        if "func" not in tokens:
+            return resultado
+        
+        idx = tokens.index("func")
     
+        # Verificar que haya nombre después de func
+        if idx + 1 >= len(tokens):
+            resultado["errores"].append(f"⚠ Línea {linea}: 'func' debe ir seguido del nombre de la función")
+            return resultado
+        
+        nombre_func = tokens[idx + 1]
+        
+        # Verificar identificador válido
+        if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", nombre_func):
+            resultado["errores"].append(f"⚠ Línea {linea}: '{nombre_func}' no es un nombre de función válido")
+            return resultado
+        
+        # Registrar función
+        if nombre_func in self.funciones:
+            resultado["advertencias"].append(f"⚠️ Línea {linea}: Función '{nombre_func}' redeclarada")
+        else:
+            self.funciones.add(nombre_func)
+        
+        # Verificar paréntesis
+        if idx + 2 >= len(tokens) or tokens[idx + 2] != "(":
+            resultado["errores"].append(f"⚠ Línea {linea}: Falta '(' después del nombre de la función")
+        
+        return resultado
+
     def _detectar_ambiguedad(self, tokens, linea):
         """Detecta construcciones ambiguas o potencialmente problemáticas"""
         advertencias = []
